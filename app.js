@@ -2700,20 +2700,87 @@ function updatePlaybackProgress(currentBeat) {
     const [beatsPerBar] = state.timeSignature.split('/').map(Number);
     const beatsPerLine = state.barsPerLine * beatsPerBar;
     
-    // Determine which line we're on
-    const lineIndex = Math.floor(currentBeat / beatsPerLine);
-    const beatInLine = currentBeat % beatsPerLine;
+    // Build a map of beat positions accounting for repeats
+    let visualBeat = 0;
+    let foundPosition = false;
+    let targetLineId = 0;
+    let targetBeatInLine = 0;
+    
+    // Process through lines and bars to find visual position
+    state.lines.forEach((line, lineIdx) => {
+        if (foundPosition) return;
+        
+        let lineStartBeat = visualBeat;
+        let repeatSection = null;
+        let repeatStartBeat = 0;
+        
+        line.bars.forEach((bar, barIdx) => {
+            if (foundPosition) return;
+            
+            // Check for repeat start
+            if (bar.repeatStart) {
+                repeatStartBeat = visualBeat;
+                repeatSection = { startBeat: visualBeat, startBar: barIdx };
+            }
+            
+            // Check if currentBeat falls in this bar
+            const barStartBeat = visualBeat;
+            const barEndBeat = visualBeat + beatsPerBar;
+            
+            if (currentBeat >= barStartBeat && currentBeat < barEndBeat) {
+                // Current beat is in this bar
+                targetLineId = lineIdx;
+                targetBeatInLine = currentBeat - lineStartBeat;
+                foundPosition = true;
+                return;
+            }
+            
+            // Check for repeat end
+            if (bar.repeatEnd && repeatSection) {
+                const repeatEndBeat = visualBeat + beatsPerBar;
+                const repeatDuration = repeatEndBeat - repeatSection.startBeat;
+                
+                // Check if currentBeat is in the second iteration of repeat
+                if (currentBeat >= repeatEndBeat && currentBeat < repeatEndBeat + repeatDuration) {
+                    // We're in the second iteration - map back to first iteration visually
+                    const beatInSecondIteration = currentBeat - repeatEndBeat;
+                    const visualBeatInRepeat = repeatSection.startBeat + beatInSecondIteration;
+                    targetLineId = lineIdx;
+                    targetBeatInLine = visualBeatInRepeat - lineStartBeat;
+                    foundPosition = true;
+                    return;
+                }
+                
+                // Add the repeat duration to visual beat
+                visualBeat = repeatEndBeat + repeatDuration;
+                repeatSection = null;
+                return;
+            }
+            
+            visualBeat += beatsPerBar;
+        });
+        
+        if (!foundPosition) {
+            visualBeat = lineStartBeat + beatsPerLine;
+        }
+    });
+    
+    // If not found, use simple calculation as fallback
+    if (!foundPosition) {
+        targetLineId = Math.floor(currentBeat / beatsPerLine);
+        targetBeatInLine = currentBeat % beatsPerLine;
+    }
     
     // Update progress line for each line
     document.querySelectorAll('.playback-progress').forEach((progressLine) => {
         const progressLineId = parseInt(progressLine.dataset.lineId);
         
-        if (progressLineId === lineIndex) {
+        if (progressLineId === targetLineId) {
             // Show and position the progress line for the current line
             progressLine.classList.add('active');
-            const percentInLine = (beatInLine / beatsPerLine) * 100;
+            const percentInLine = (targetBeatInLine / beatsPerLine) * 100;
             progressLine.style.left = `${Math.min(percentInLine, 100)}%`;
-        } else if (progressLineId < lineIndex) {
+        } else if (progressLineId < targetLineId) {
             // Lines already played - hide
             progressLine.classList.remove('active');
             progressLine.style.left = '100%';
