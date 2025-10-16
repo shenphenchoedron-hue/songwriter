@@ -1,0 +1,15 @@
+{
+  "name": "songwriter",
+  "version": "1.0.0",
+  "description": "Songwriter - Open Source Song Composition Tool",
+  "author": "Lone Hansen",
+  "license": "GPL-3.0",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

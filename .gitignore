@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Tauri Build Outputs
+src-tauri/target/
+src-tauri/Cargo.lock
+
+# Distribution folder (will be built fresh each time)
+dist/
+
+# System Files
+.DS_Store
+*.log
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+
+# Temporary files
+*.tmp
+*.bak

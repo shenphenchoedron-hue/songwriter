@@ -1,0 +1,241 @@
+<!--
+ * Songwriter - Open Source Song Composition Tool
+ * Copyright (C) 2025  Lone Hansen
+ *
+ * This file is part of Songwriter.
+ * Songwriter is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * Songwriter is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with Songwriter.  If not, see <https://www.gnu.org/licenses/>.
+ -->
+<!DOCTYPE html>
+<html lang="da">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Songwriter - Chord Progression Builder</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎵 Songwriter</h1>
+            <p>Byg din sangs akkordprogression</p>
+        </header>
+
+        <div class="controls-panel">
+            <div class="control-group">
+                <label for="key-select">Toneart:</label>
+                <select id="key-select">
+                    <option value="C">C</option>
+                    <option value="Db">Db</option>
+                    <option value="D">D</option>
+                    <option value="Eb">Eb</option>
+                    <option value="E">E</option>
+                    <option value="F">F</option>
+                    <option value="F#">F#</option>
+                    <option value="Gb">Gb</option>
+                    <option value="G">G</option>
+                    <option value="Ab">Ab</option>
+                    <option value="A">A</option>
+                    <option value="Bb">Bb</option>
+                    <option value="B">B</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="scale-select">Skala:</label>
+                <select id="scale-select">
+                    <option value="major">Dur (Major/Ionian)</option>
+                    <option value="minor">Mol (Natural Minor)</option>
+                    <option value="dorian">Dorian</option>
+                    <option value="phrygian">Phrygian</option>
+                    <option value="lydian">Lydian</option>
+                    <option value="mixolydian">Mixolydian</option>
+                    <option value="locrian">Locrian</option>
+                    <option value="harmonicMinor">Harmonic Minor</option>
+                    <option value="melodicMinor">Melodic Minor</option>
+                    <option value="pentatonicMajor">Pentatonic Major</option>
+                    <option value="pentatonicMinor">Pentatonic Minor</option>
+                    <option value="blues">Blues</option>
+                    <option value="wholeTone">Whole Tone</option>
+                    <option value="diminished">Diminished</option>
+                    <option value="bebopMajor">Bebop Major</option>
+                    <option value="bebopDominant">Bebop Dominant</option>
+                    <option value="altered">Altered (Super Locrian)</option>
+                    <option value="lydianDominant">Lydian Dominant</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="time-signature">Takt:</label>
+                <select id="time-signature">
+                    <option value="4/4">4/4</option>
+                    <option value="3/4">3/4</option>
+                    <option value="6/8">6/8</option>
+                    <option value="2/4">2/4</option>
+                    <option value="5/4">5/4</option>
+                    <option value="7/4">7/4</option>
+                    <option value="7/8">7/8</option>
+                    <option value="12/8">12/8</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="bars-per-line">Bar pr. linje:</label>
+                <input type="number" id="bars-per-line" min="2" max="8" value="4">
+            </div>
+
+            <div class="control-group">
+                <label for="bpm-input">BPM (Tempo):</label>
+                <input type="number" id="bpm-input" min="40" max="240" value="120">
+            </div>
+
+            <div class="control-group">
+                <label for="chord-volume">Akkord volumen:</label>
+                <div class="volume-control">
+                    <input type="range" id="chord-volume" class="volume-slider" min="0" max="1" step="0.1" value="0.8">
+                    <span id="chord-volume-value" class="volume-value">80%</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Instrument Legend -->
+        <div id="instrument-legend" class="instrument-legend" style="display: none;">
+            <h3>🎵 Instrumenter i brug</h3>
+            <div id="legend-items" class="legend-items">
+                <!-- Legend items will be populated by JavaScript -->
+            </div>
+        </div>
+
+        <div class="action-buttons">
+            <button id="play-all-btn" class="btn btn-secondary">▶ Afspil alt</button>
+            <button id="save-musicxml-btn" class="btn btn-secondary">💾 Gem MusicXML</button>
+            <button id="load-musicxml-btn" class="btn btn-secondary">📂 Load MusicXML</button>
+            <input type="file" id="file-input" accept=".xml,.musicxml" style="display: none;">
+            <button id="export-midi-btn" class="btn btn-secondary">🎹 Eksporter MIDI</button>
+            <button id="export-separate-midi-btn" class="btn btn-secondary">🎼 Eksporter MIDI (separate)</button>
+            <button id="export-pdf-btn" class="btn btn-secondary">📄 Eksporter PDF</button>
+        </div>
+
+        <div id="song-container" class="song-container">
+            <!-- Lines will be dynamically added here -->
+        </div>
+
+        <div class="add-line-container">
+            <button id="add-line-btn" class="btn btn-primary">+ Tilføj linje</button>
+        </div>
+    </div>
+
+    <!-- Circle of Fifths Modal -->
+    <div id="chord-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Vælg akkord</h2>
+                <span class="close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="circle-container">
+                    <svg id="circle-of-fifths" width="600" height="600" viewBox="0 0 600 600"></svg>
+                </div>
+                <div class="chord-extensions">
+                    <h3>Akkord udvidelser:</h3>
+                    <div class="extension-buttons">
+                        <button class="ext-btn" data-ext="">Basic</button>
+                        <button class="ext-btn" data-ext="7">7</button>
+                        <button class="ext-btn" data-ext="maj7">maj7</button>
+                        <button class="ext-btn" data-ext="9">9</button>
+                        <button class="ext-btn" data-ext="11">11</button>
+                        <button class="ext-btn" data-ext="13">13</button>
+                        <button class="ext-btn" data-ext="sus2">sus2</button>
+                        <button class="ext-btn" data-ext="sus4">sus4</button>
+                        <button class="ext-btn" data-ext="aug">aug</button>
+                        <button class="ext-btn" data-ext="dim">dim</button>
+                        <button class="ext-btn" data-ext="dim7">dim7</button>
+                    </div>
+                </div>
+                <div class="chord-duration">
+                    <h3>Akkord varighed (taktslag):</h3>
+                    <select id="duration-select" class="duration-select">
+                        <option value="0.25">¼ (0.25)</option>
+                        <option value="0.5">½ (0.5)</option>
+                        <option value="0.75">¾ (0.75)</option>
+                        <option value="1" selected>1</option>
+                        <option value="1.5">1½ (1.5)</option>
+                        <option value="2">2</option>
+                        <option value="2.5">2½ (2.5)</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                        <option value="6">6</option>
+                        <option value="8">8</option>
+                    </select>
+                </div>
+                <button id="insert-chord-btn" class="btn btn-primary btn-large">Indsæt akkord</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Melody Instrument Selection Modal -->
+    <div id="melody-instrument-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Vælg melodiinstrument</h2>
+                <span class="close melody-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div class="instrument-grid">
+                    <!-- Instruments will be populated by JavaScript -->
+                </div>
+                <button id="add-melody-line-btn" class="btn btn-primary btn-large">Tilføj melodilinje</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Melody Note Selection Modal -->
+    <div id="melody-note-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Vælg meloditoner</h2>
+                <span class="close melody-note-close">&times;</span>
+            </div>
+            <div class="modal-body">
+                <div id="melody-note-grid" class="melody-note-selection-grid">
+                    <!-- Notes will be populated by JavaScript -->
+                </div>
+                <div class="chord-duration">
+                    <h3>Nodelængde (taktslag):</h3>
+                    <select id="melody-note-duration-select" class="duration-select">
+                        <option value="0.25">¼ (0.25)</option>
+                        <option value="0.5">½ (0.5)</option>
+                        <option value="0.75">¾ (0.75)</option>
+                        <option value="1" selected>1</option>
+                        <option value="1.5">1½ (1.5)</option>
+                        <option value="2">2</option>
+                        <option value="2.5">2½ (2.5)</option>
+                        <option value="3">3</option>
+                        <option value="4">4</option>
+                    </select>
+                </div>
+                <button id="insert-melody-notes-btn" class="btn btn-primary btn-large">Indsæt toner</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/soundfont-player@latest/dist/soundfont-player.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="instruments.js"></script>
+    <script src="audio.js"></script>
+    <script src="musicxml.js"></script>
+    <script src="midi.js"></script>
+    <script src="pdf.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
