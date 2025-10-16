@@ -421,7 +421,7 @@ class AudioEngine {
     }
 
     // Play a sequence of chords and melodies
-    async playSequence(chords, melodyNotes = [], bpm = 120) {
+    async playSequence(chords, melodyNotes = [], bpm = 120, onComplete = null, onProgress = null) {
         if (this.isPlaying) {
             this.stopSequence();
         }
@@ -443,6 +443,13 @@ class AudioEngine {
         
         let currentTime = this.audioContext.currentTime;
         let maxTime = currentTime;
+        const startTime = this.audioContext.currentTime;
+
+        // Calculate total beats for progress tracking
+        let totalBeats = 0;
+        chords.forEach(chord => {
+            totalBeats += (chord.duration || 1.0);
+        });
 
         // Play chords
         chords.forEach((chord) => {
@@ -451,8 +458,11 @@ class AudioEngine {
             const duration = chord.duration || 1.0;
             const actualDuration = duration * beatDuration;
             
-            this.playChordAtTime(chord.name, currentTime, actualDuration, strumDelay);
-            
+            // Only play if it's not a rest (empty bar)
+            if (chord.name && !chord.isRest) {
+                this.playChordAtTime(chord.name, currentTime, actualDuration, strumDelay);
+            }
+            // Always advance time, even for rests
             currentTime += actualDuration;
         });
         
@@ -460,8 +470,6 @@ class AudioEngine {
         
         // Play melody notes (new grid-based format, includes drums)
         if (melodyNotes && melodyNotes.length > 0) {
-            const startTime = this.audioContext.currentTime;
-            
             melodyNotes.forEach(note => {
                 if (!this.isPlaying) return;
                 
@@ -481,11 +489,33 @@ class AudioEngine {
             });
         }
 
+        // Setup progress tracking animation
+        if (onProgress && typeof onProgress === 'function') {
+            const updateProgress = () => {
+                if (!this.isPlaying) return;
+                
+                const elapsed = this.audioContext.currentTime - startTime;
+                const currentBeat = elapsed / beatDuration;
+                onProgress(currentBeat);
+                
+                // Continue updating
+                if (this.isPlaying) {
+                    requestAnimationFrame(updateProgress);
+                }
+            };
+            requestAnimationFrame(updateProgress);
+        }
+
         // Reset playing state after sequence
         const totalDuration = (maxTime - this.audioContext.currentTime) * 1000;
         this.currentSequence = setTimeout(() => {
             this.isPlaying = false;
             this.currentSequence = null;
+            
+            // Call the completion callback if provided
+            if (onComplete && typeof onComplete === 'function') {
+                onComplete();
+            }
         }, totalDuration);
     }
     
@@ -511,16 +541,37 @@ class AudioEngine {
 
     // Stop current sequence
     stopSequence() {
+        console.log('Stopping sequence...');
         this.isPlaying = false;
+        
+        // Clear the timeout
         if (this.currentSequence) {
             clearTimeout(this.currentSequence);
             this.currentSequence = null;
         }
         
-        // Stop all playing notes
-        if (this.instrument && this.instrument.stop) {
-            this.instrument.stop();
+        // Stop all soundfont instruments
+        Object.values(this.instruments).forEach(instrument => {
+            if (instrument && instrument.stop) {
+                try {
+                    instrument.stop();
+                } catch (e) {
+                    console.warn('Could not stop instrument:', e);
+                }
+            }
+        });
+        
+        // Stop Tone.js transport and cancel all scheduled events
+        if (typeof Tone !== 'undefined') {
+            try {
+                Tone.Transport.stop();
+                Tone.Transport.cancel();
+            } catch (e) {
+                console.warn('Could not stop Tone.js:', e);
+            }
         }
+        
+        console.log('Sequence stopped');
     }
 }
 

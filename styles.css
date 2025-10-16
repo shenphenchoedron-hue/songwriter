@@ -212,6 +212,24 @@ header p {
     display: flex;
     gap: 10px;
     margin-bottom: 10px;
+    position: relative;
+}
+
+/* Playback progress line */
+.playback-progress {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background-color: #e74c3c;
+    z-index: 100;
+    pointer-events: none;
+    display: none;
+    box-shadow: 0 0 8px rgba(231, 76, 60, 0.6);
+}
+
+.playback-progress.active {
+    display: block;
 }
 
 .bar {

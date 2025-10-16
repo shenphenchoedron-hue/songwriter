@@ -58,9 +58,20 @@ class MusicXMLExporter {
     </encoding>
     <!-- Custom data for grid-based melody system -->
     <miscellaneous>
-      <miscellaneous-field name="melody-data">${this.escapeXML(JSON.stringify({
-        melodyLines: state.lines.map(line => ({
-          lineId: line.id,
+      <miscellaneous-field name="song-data">${this.escapeXML(JSON.stringify({
+        key: state.key,
+        scale: state.scale,
+        timeSignature: state.timeSignature,
+        barsPerLine: state.barsPerLine,
+        bpm: state.bpm,
+        lines: state.lines.map(line => ({
+          id: line.id,
+          bars: line.bars.map(bar => ({
+            chords: bar.chords || [],
+            lyrics: bar.lyrics || '',
+            repeatStart: bar.repeatStart || false,
+            repeatEnd: bar.repeatEnd || false
+          })),
           melodyLines: line.melodyLines || []
         }))
       }))}</miscellaneous-field>
@@ -550,29 +561,62 @@ class MusicXMLExporter {
             }
         });
 
-        // Parse custom melody data from miscellaneous field
-        const melodyDataField = xmlDoc.querySelector('miscellaneous-field[name="melody-data"]');
-        if (melodyDataField) {
+        // Parse custom song data from miscellaneous field
+        const songDataField = xmlDoc.querySelector('miscellaneous-field[name="song-data"]');
+        if (songDataField) {
             try {
-                const melodyData = JSON.parse(melodyDataField.textContent);
+                const songData = JSON.parse(songDataField.textContent);
                 
-                // Restore melody lines to their respective song lines
-                melodyData.melodyLines.forEach(lineData => {
-                    const line = state.lines[lineData.lineId];
-                    if (line && lineData.melodyLines) {
-                        line.melodyLines = lineData.melodyLines;
-                        
-                        // Update melodyLineCounter to ensure new lines get unique IDs
-                        lineData.melodyLines.forEach(ml => {
-                            const idNum = parseInt(ml.id.substring(1));
-                            if (!isNaN(idNum) && idNum >= state.melodyLineCounter) {
-                                state.melodyLineCounter = idNum + 1;
+                // Restore all data
+                state.key = songData.key || state.key;
+                state.scale = songData.scale || state.scale;
+                state.timeSignature = songData.timeSignature || state.timeSignature;
+                state.barsPerLine = songData.barsPerLine || state.barsPerLine;
+                state.bpm = songData.bpm || state.bpm;
+                
+                // Clear and restore lines
+                state.lines = [];
+                
+                songData.lines.forEach(lineData => {
+                    const line = {
+                        id: lineData.id,
+                        bars: lineData.bars.map(barData => ({
+                            chords: barData.chords || [],
+                            lyrics: barData.lyrics || '',
+                            repeatStart: barData.repeatStart || false,
+                            repeatEnd: barData.repeatEnd || false
+                        })),
+                        melodyLines: lineData.melodyLines || []
+                    };
+                    state.lines.push(line);
+                    
+                    // Update melodyLineCounter to ensure new lines get unique IDs
+                    line.melodyLines.forEach(ml => {
+                        const idNum = parseInt(ml.id.substring(1));
+                        if (!isNaN(idNum) && idNum >= state.melodyLineCounter) {
+                            state.melodyLineCounter = idNum + 1;
+                        }
+                    });
+                });
+                
+                console.log('Restored song data from MusicXML:', songData);
+            } catch (e) {
+                console.error('Error parsing song data:', e);
+                // Fallback to old melody-data field
+                const melodyDataField = xmlDoc.querySelector('miscellaneous-field[name="melody-data"]');
+                if (melodyDataField) {
+                    try {
+                        const melodyData = JSON.parse(melodyDataField.textContent);
+                        melodyData.melodyLines.forEach(lineData => {
+                            const line = state.lines[lineData.lineId];
+                            if (line && lineData.melodyLines) {
+                                line.melodyLines = lineData.melodyLines;
                             }
                         });
+                    } catch (e2) {
+                        console.error('Error parsing legacy melody data:', e2);
                     }
-                });
-            } catch (e) {
-                console.error('Error parsing melody data:', e);
+                }
             }
         }
 
@@ -580,6 +624,8 @@ class MusicXMLExporter {
         document.getElementById('key-select').value = state.key;
         document.getElementById('scale-select').value = state.scale;
         document.getElementById('time-signature').value = state.timeSignature;
+        document.getElementById('bars-per-line').value = state.barsPerLine;
+        document.getElementById('bpm-input').value = state.bpm;
     }
 
     getFifthsKey(fifths) {

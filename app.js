@@ -1302,6 +1302,7 @@ function getLineHTML(line) {
         </div>
         <div class="section-title">Akkorder</div>
         <div class="bars-container">
+            <div class="playback-progress" data-line-id="${line.id}"></div>
             ${line.bars.map((bar, barIndex) => `
                 <div class="bar ${bar.repeatStart ? 'repeat-start' : ''} ${bar.repeatEnd ? 'repeat-end' : ''}" data-bar-index="${barIndex}">
                     <div class="bar-number">${barIndex + 1}</div>
@@ -2484,6 +2485,26 @@ function playBar(lineId, barIndex) {
 }
 
 function playLine(lineId) {
+    const lineEl = document.querySelector(`[data-line-id="${lineId}"]`);
+    const playBtn = lineEl?.querySelector('.play-line-btn');
+    
+    // Check if already playing - if so, stop
+    if (window.AudioEngine && window.AudioEngine.isPlaying) {
+        console.log('Stopping playback...');
+        window.AudioEngine.stopSequence();
+        if (playBtn) {
+            playBtn.textContent = '▶ Afspil';
+            playBtn.classList.remove('playing');
+        }
+        // Also reset the play-all button if it's playing
+        const playAllBtn = document.getElementById('play-all-btn');
+        if (playAllBtn) {
+            playAllBtn.textContent = '▶ Afspil alt';
+            playAllBtn.classList.remove('playing');
+        }
+        return;
+    }
+    
     const line = state.lines[lineId];
     console.log('Playing line', lineId, 'bars:', line.bars.length);
     const chords = processRepeats([line]);
@@ -2492,16 +2513,37 @@ function playLine(lineId) {
     // Collect melody notes from this line
     const melodyData = collectMelodyNotes([line]);
     
+    // Update button to show stop icon
+    if (playBtn) {
+        playBtn.textContent = '⬛ Stop';
+        playBtn.classList.add('playing');
+    }
+    
     playChordAndMelodySequence(chords, melodyData);
 }
 
 function playAll() {
+    const playBtn = document.getElementById('play-all-btn');
+    
+    // Check if already playing - if so, stop
+    if (window.AudioEngine && window.AudioEngine.isPlaying) {
+        console.log('Stopping playback...');
+        window.AudioEngine.stopSequence();
+        playBtn.textContent = '▶ Afspil alt';
+        playBtn.classList.remove('playing');
+        return;
+    }
+    
     console.log('Playing all lines:', state.lines.length);
     const chords = processRepeats(state.lines);
     console.log('After processRepeats:', chords.length, 'chords');
     
     // Collect melody notes from all lines
     const melodyData = collectMelodyNotes(state.lines);
+    
+    // Update button to show stop icon
+    playBtn.textContent = '⬛ Stop';
+    playBtn.classList.add('playing');
     
     playChordAndMelodySequence(chords, melodyData);
 }
@@ -2510,55 +2552,177 @@ function collectMelodyNotes(lines) {
     const melodyData = [];
     const subdivisions = 4;
     const [beatsPerBar] = state.timeSignature.split('/').map(Number);
-    const beatsPerLine = state.barsPerLine * beatsPerBar;
-
-    let lineOffset = 0; // Accumulated beats from previous lines
+    
+    let currentBeat = 0; // Tracks the current beat position as we build the sequence
 
     lines.forEach((line, lineIndex) => {
-        line.melodyLines.forEach(melodyLine => {
+        let repeatSection = [];
+        let repeatSectionStartBeat = 0;
+        let inRepeat = false;
 
-            const instrument = INSTRUMENTS[melodyLine.instrument];
-            if (!instrument) return;
+        line.bars.forEach((bar, barIndex) => {
+            // Check for repeat start
+            if (bar.repeatStart) {
+                console.log('  >>> MELODY REPEAT START at bar', barIndex);
+                inRepeat = true;
+                repeatSection = [];
+                repeatSectionStartBeat = currentBeat;
+            }
 
-            const isDrumset = melodyLine.instrument === 'drumset';
+            // Collect melody notes from this bar
+            const barNotes = [];
+            
+            line.melodyLines.forEach(melodyLine => {
+                const instrument = INSTRUMENTS[melodyLine.instrument];
+                if (!instrument) return;
 
-            melodyLine.notes.forEach(note => {
-                // Calculate beat position: lineOffset + (col / subdivisions)
-                const beatInLine = note.col / subdivisions;
-                const absoluteBeat = lineOffset + beatInLine;
-                const duration = note.span / subdivisions;
+                const isDrumset = melodyLine.instrument === 'drumset';
 
-                const noteData = {
-                    beat: absoluteBeat,
-                    duration: duration,
-                    instrument: instrument.soundfont,
-                    volume: melodyLine.volume || 0.7
-                };
+                melodyLine.notes.forEach(note => {
+                    // Calculate which bar this note is in
+                    const colsPerBar = beatsPerBar * subdivisions;
+                    const noteBarIndex = Math.floor(note.col / colsPerBar);
+                    
+                    if (noteBarIndex !== barIndex) return; // Not in this bar
 
-                // Add drum-specific or note-specific data
-                if (isDrumset && note.drumName) {
-                    noteData.drumName = note.drumName;
-                    noteData.midiNote = null;
-                } else {
-                    noteData.midiNote = note.midiNote;
-                }
+                    // Calculate beat position within this bar
+                    const colInBar = note.col % colsPerBar;
+                    const beatInBar = colInBar / subdivisions;
+                    const absoluteBeat = currentBeat + beatInBar;
+                    const duration = note.span / subdivisions;
 
-                melodyData.push(noteData);
+                    const noteData = {
+                        beat: absoluteBeat,
+                        duration: duration,
+                        instrument: instrument.soundfont,
+                        volume: melodyLine.volume || 0.7
+                    };
+
+                    // Add drum-specific or note-specific data
+                    if (isDrumset && note.drumName) {
+                        noteData.drumName = note.drumName;
+                        noteData.midiNote = null;
+                    } else {
+                        noteData.midiNote = note.midiNote;
+                    }
+
+                    barNotes.push(noteData);
+                });
             });
+
+            // Add bar notes to appropriate section
+            if (inRepeat) {
+                console.log('  Adding', barNotes.length, 'melody notes to repeat section');
+                repeatSection.push(...barNotes);
+            } else {
+                console.log('  Adding', barNotes.length, 'melody notes to main sequence');
+                melodyData.push(...barNotes);
+            }
+
+            // Advance current beat by one bar BEFORE checking repeat end
+            currentBeat += beatsPerBar;
+
+            // Check for repeat end
+            if (bar.repeatEnd) {
+                console.log('  >>> MELODY REPEAT END at bar', barIndex, '- Section has', repeatSection.length, 'notes');
+                // Add the repeat section first time
+                console.log('  Adding melody repeat section first time');
+                melodyData.push(...repeatSection);
+                
+                // Calculate the duration of the repeat section
+                const repeatDuration = currentBeat - repeatSectionStartBeat;
+                console.log('  Repeat duration:', repeatDuration, 'beats (from', repeatSectionStartBeat, 'to', currentBeat, ')');
+                
+                // Add the repeat section second time with offset beats
+                console.log('  Adding melody repeat section second time (THE REPEAT)');
+                const secondRepetition = repeatSection.map(note => ({
+                    ...note,
+                    beat: note.beat + repeatDuration
+                }));
+                melodyData.push(...secondRepetition);
+                
+                // Advance currentBeat by the repeat duration again (because we're playing it twice)
+                currentBeat += repeatDuration;
+                console.log('  Advanced currentBeat to', currentBeat, 'after repeat');
+                
+                inRepeat = false;
+                repeatSection = [];
+            }
         });
 
-        // Add this line's beats to the offset for next line
-        lineOffset += beatsPerLine;
+        // If there are remaining notes in repeat section (no end found)
+        if (repeatSection.length > 0) {
+            console.log('WARNING: Melody repeat section not closed, playing once. Section had', repeatSection.length, 'notes');
+            melodyData.push(...repeatSection);
+        }
     });
 
+    console.log('=== MELODY FINAL: Total notes to play:', melodyData.length, '===');
     return melodyData;
 }
 
 function playChordAndMelodySequence(chords, melodyNotes) {
     if (window.AudioEngine) {
-        // Convert to format AudioEngine expects
-        window.AudioEngine.playSequence(chords, melodyNotes, state.bpm);
+        // Convert to format AudioEngine expects with callbacks
+        window.AudioEngine.playSequence(
+            chords,
+            melodyNotes,
+            state.bpm,
+            () => {
+                // onComplete callback - reset all play buttons and hide progress
+                const playAllBtn = document.getElementById('play-all-btn');
+                if (playAllBtn) {
+                    playAllBtn.textContent = '▶ Afspil alt';
+                    playAllBtn.classList.remove('playing');
+                }
+                
+                // Reset all line play buttons
+                document.querySelectorAll('.play-line-btn').forEach(btn => {
+                    btn.textContent = '▶ Afspil';
+                    btn.classList.remove('playing');
+                });
+                
+                // Hide and reset all progress lines
+                document.querySelectorAll('.playback-progress').forEach(line => {
+                    line.classList.remove('active');
+                    line.style.left = '0%';
+                });
+            },
+            (currentBeat) => {
+                // onProgress callback - update progress line position
+                updatePlaybackProgress(currentBeat);
+            }
+        );
     }
+}
+
+function updatePlaybackProgress(currentBeat) {
+    const [beatsPerBar] = state.timeSignature.split('/').map(Number);
+    const beatsPerLine = state.barsPerLine * beatsPerBar;
+    
+    // Determine which line we're on
+    const lineIndex = Math.floor(currentBeat / beatsPerLine);
+    const beatInLine = currentBeat % beatsPerLine;
+    
+    // Update progress line for each line
+    document.querySelectorAll('.playback-progress').forEach((progressLine) => {
+        const progressLineId = parseInt(progressLine.dataset.lineId);
+        
+        if (progressLineId === lineIndex) {
+            // Show and position the progress line for the current line
+            progressLine.classList.add('active');
+            const percentInLine = (beatInLine / beatsPerLine) * 100;
+            progressLine.style.left = `${Math.min(percentInLine, 100)}%`;
+        } else if (progressLineId < lineIndex) {
+            // Lines already played - hide
+            progressLine.classList.remove('active');
+            progressLine.style.left = '100%';
+        } else {
+            // Lines not yet played - hide
+            progressLine.classList.remove('active');
+            progressLine.style.left = '0%';
+        }
+    });
 }
 
 function processRepeats(lines) {
@@ -2582,12 +2746,19 @@ function processRepeats(lines) {
 
             // Collect chords from this bar
             const barChords = [];
-            bar.chords.forEach(chord => {
-                const chordName = `${chord.root}${chord.quality}${chord.extension}`;
-                barChords.push({ name: chordName, duration: chord.duration });
-            });
+            if (bar.chords.length > 0) {
+                // Bar has chords
+                bar.chords.forEach(chord => {
+                    const chordName = `${chord.root}${chord.quality}${chord.extension}`;
+                    barChords.push({ name: chordName, duration: chord.duration });
+                });
+            } else {
+                // Empty bar - add a rest/silence with the full bar duration
+                const [beatsPerBar] = state.timeSignature.split('/').map(Number);
+                barChords.push({ name: null, duration: beatsPerBar, isRest: true });
+            }
 
-            console.log('  Collected', barChords.length, 'chords from this bar');
+            console.log('  Collected', barChords.length, 'chords from this bar (including rests)');
 
             // Add to appropriate section
             if (inRepeat) {
